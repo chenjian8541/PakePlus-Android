@@ -1,216 +1,129 @@
 package com.app.pakeplus
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.view.GestureDetector
-import android.view.MotionEvent
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.activity.enableEdgeToEdge
-// import android.view.Menu
-// import android.view.WindowInsets
-// import com.google.android.material.snackbar.Snackbar
-// import com.google.android.material.navigation.NavigationView
-// import androidx.navigation.findNavController
-// import androidx.navigation.ui.AppBarConfiguration
-// import androidx.navigation.ui.navigateUp
-// import androidx.navigation.ui.setupActionBarWithNavController
-// import androidx.navigation.ui.setupWithNavController
-// import androidx.drawerlayout.widget.DrawerLayout
-// import com.app.pakeplus.databinding.ActivityMainBinding
+import android.provider.MediaStore
+import android.webkit.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.GestureDetectorCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
-//    private lateinit var appBarConfiguration: AppBarConfiguration
-//    private lateinit var binding: ActivityMainBinding
-
     private lateinit var webView: WebView
-    private lateinit var gestureDetector: GestureDetectorCompat
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private val REQUEST_PERMISSION = 100
 
-    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
-        enableEdgeToEdge()
-        setContentView(R.layout.single_main)
+        webView = findViewById(R.id.webView)
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.ConstraintLayout)) { view, insets ->
-            val systemBar = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(
-                0, systemBar.top, 0, 0
-            )
-            insets
-        }
+        initWebView()
+        requestRuntimePermissions()
+    }
 
-        webView = findViewById<WebView>(R.id.webview)
+    private fun initWebView() {
+        val settings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.allowFileAccess = true
+        settings.allowContentAccess = true
+        settings.mediaPlaybackRequiresUserGesture = false
 
-        webView.settings.apply {
-            javaScriptEnabled = true       // 启用JS
-            domStorageEnabled = true       // 启用DOM存储（Vue 需要）
-            allowFileAccess = true         // 允许文件访问
-            setSupportMultipleWindows(true)
-        }
+        webView.webChromeClient = object : WebChromeClient() {
 
-        // webView.settings.userAgentString = ""
+            // 允许 H5 摄像头 / 麦克风
+            override fun onPermissionRequest(request: PermissionRequest) {
+                runOnUiThread {
+                    request.grant(request.resources)
+                }
+            }
 
-        webView.settings.loadWithOverviewMode = true
-        webView.settings.setSupportZoom(false)
+            // 处理 input type=file
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
 
+                this@MainActivity.filePathCallback?.onReceiveValue(null)
+                this@MainActivity.filePathCallback = filePathCallback
 
-        // clear cache
-        webView.clearCache(true)
-
-        // inject js
-        webView.webViewClient = MyWebViewClient()
-
-        // get web load progress
-        webView.webChromeClient = MyChromeClient()
-
-        // Setup gesture detector
-        gestureDetector =
-            GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
-                override fun onFling(
-                    e1: MotionEvent?,
-                    e2: MotionEvent,
-                    velocityX: Float,
-                    velocityY: Float
-                ): Boolean {
-                    if (e1 == null) return false
-
-                    val diffX = e2.x - e1.x
-                    val diffY = e2.y - e1.y
-
-                    // Only handle horizontal swipes
-                    if (Math.abs(diffX) > Math.abs(diffY)) {
-                        if (Math.abs(diffX) > 100 && Math.abs(velocityX) > 100) {
-                            if (diffX > 0) {
-                                // Swipe right - go back
-                                if (webView.canGoBack()) {
-                                    webView.goBack()
-                                    return true
-                                }
-                            } else {
-                                // Swipe left - go forward
-                                if (webView.canGoForward()) {
-                                    webView.goForward()
-                                    return true
-                                }
-                            }
-                        }
-                    }
+                val intent = fileChooserParams?.createIntent()
+                try {
+                    fileChooserLauncher.launch(intent)
+                } catch (e: Exception) {
+                    this@MainActivity.filePathCallback = null
                     return false
                 }
-            })
-
-        // Set touch listener for WebView
-        webView.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
-            false
-        }
-
-        webView.loadUrl("https://juejin.cn/")
-
-//        binding = ActivityMainBinding.inflate(layoutInflater)
-//        setContentView(R.layout.single_main)
-
-//        setSupportActionBar(binding.appBarMain.toolbar)
-
-//        binding.appBarMain.fab.setOnClickListener { view ->
-//            Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-//                .setAction("Action", null)
-//                .setAnchorView(R.id.fab).show()
-//        }
-
-//        val drawerLayout: DrawerLayout = binding.drawerLayout
-//        val navView: NavigationView = binding.navView
-//        val navController = findNavController(R.id.nav_host_fragment_content_main)
-
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
-//        appBarConfiguration = AppBarConfiguration(
-//            setOf(
-//                R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow
-//            ), drawerLayout
-//        )
-//        setupActionBarWithNavController(navController, appBarConfiguration)
-//        navView.setupWithNavController(navController)
-    }
-
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            super.onBackPressed()
-        }
-    }
-
-//    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-//        // Inflate the menu; this adds items to the action bar if it is present.
-//        menuInflater.inflate(R.menu.main, menu)
-//        return true
-//    }
-
-//    override fun onSupportNavigateUp(): Boolean {
-//        val navController = findNavController(R.id.nav_host_fragment_content_main)
-//        return navController.navigateUp(appBarConfiguration) || super.onSupportNavigateUp()
-//    }
-
-    inner class MyWebViewClient : WebViewClient() {
-
-        // vConsole debug
-        private var debug = false
-
-        @Deprecated("Deprecated in Java", ReplaceWith("false"))
-        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-            return false
-        }
-
-        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-            super.doUpdateVisitedHistory(view, url, isReload)
-        }
-
-        override fun onReceivedError(
-            view: WebView?,
-            request: WebResourceRequest?,
-            error: WebResourceError?
-        ) {
-            super.onReceivedError(view, request, error)
-            println("webView onReceivedError: ${error?.description}")
-        }
-
-        override fun onPageFinished(view: WebView?, url: String?) {
-            super.onPageFinished(view, url)
-        }
-
-        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-            super.onPageStarted(view, url, favicon)
-            if (debug) {
-                // vConsole
-                val vConsole = assets.open("vConsole.js").bufferedReader().use { it.readText() }
-                val openDebug = """var vConsole = new window.VConsole()"""
-                view?.evaluateJavascript(vConsole + openDebug, null)
+                return true
             }
-            // inject js
-            val injectJs = assets.open("custom.js").bufferedReader().use { it.readText() }
-            view?.evaluateJavascript(injectJs, null)
+        }
+
+        webView.webViewClient = WebViewClient()
+        webView.loadUrl("https://你的H5地址") // 修改为你的地址
+    }
+
+    // 文件选择回调
+    private val fileChooserLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (filePathCallback == null) return@registerForActivityResult
+
+            val uris: Array<Uri>? = if (result.resultCode == Activity.RESULT_OK) {
+                result.data?.let { data ->
+                    WebChromeClient.FileChooserParams.parseResult(
+                        result.resultCode,
+                        data
+                    )
+                }
+            } else null
+
+            filePathCallback?.onReceiveValue(uris)
+            filePathCallback = null
+        }
+
+    private fun requestRuntimePermissions() {
+        val permissions = mutableListOf<String>()
+
+        if (check(Manifest.permission.CAMERA))
+            permissions.add(Manifest.permission.CAMERA)
+
+        if (check(Manifest.permission.RECORD_AUDIO))
+            permissions.add(Manifest.permission.RECORD_AUDIO)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (check(Manifest.permission.READ_MEDIA_IMAGES))
+                permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
+            if (check(Manifest.permission.READ_MEDIA_VIDEO))
+                permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            if (check(Manifest.permission.READ_EXTERNAL_STORAGE))
+                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            if (check(Manifest.permission.WRITE_EXTERNAL_STORAGE))
+                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+
+        if (permissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                permissions.toTypedArray(),
+                REQUEST_PERMISSION
+            )
         }
     }
 
-    inner class MyChromeClient : WebChromeClient() {
-        override fun onProgressChanged(view: WebView?, newProgress: Int) {
-            super.onProgressChanged(view, newProgress)
-            val url = view?.url
-            println("wev view url:$url")
-        }
+    private fun check(permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            permission
+        ) != PackageManager.PERMISSION_GRANTED
     }
 }
